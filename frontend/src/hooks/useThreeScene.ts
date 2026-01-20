@@ -37,203 +37,7 @@ export function useThreeScene(
 
   const { onObjectSelect, sceneData, cameraTransition } = options;
 
-  // Initialize Three.js scene
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    const container = containerRef.current;
-    const width = container.clientWidth;
-    const height = container.clientHeight;
-
-    // Create scene
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(sceneData.environment.background_color);
-    scene.fog = new THREE.Fog(sceneData.environment.background_color, 30, 100);
-
-    // Create camera
-    const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
-    camera.position.set(
-      sceneData.camera.position.x,
-      sceneData.camera.position.y,
-      sceneData.camera.position.z
-    );
-
-    // Create renderer
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      alpha: true,
-    });
-    renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
-    container.appendChild(renderer.domElement);
-
-    // Create controls
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.set(
-      sceneData.camera.target.x,
-      sceneData.camera.target.y,
-      sceneData.camera.target.z
-    );
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-    controls.minDistance = 5;
-    controls.maxDistance = 100;
-    controls.maxPolarAngle = Math.PI / 2 - 0.1;
-
-    // Add lights
-    const ambientLight = new THREE.AmbientLight(
-      0xffffff,
-      sceneData.lighting.ambient_intensity
-    );
-    scene.add(ambientLight);
-
-    const directionalLight = new THREE.DirectionalLight(
-      0xffffff,
-      sceneData.lighting.directional_intensity
-    );
-    directionalLight.position.set(
-      sceneData.lighting.directional_position.x,
-      sceneData.lighting.directional_position.y,
-      sceneData.lighting.directional_position.z
-    );
-    directionalLight.castShadow = true;
-    directionalLight.shadow.mapSize.width = 2048;
-    directionalLight.shadow.mapSize.height = 2048;
-    directionalLight.shadow.camera.near = 0.5;
-    directionalLight.shadow.camera.far = 100;
-    directionalLight.shadow.camera.left = -30;
-    directionalLight.shadow.camera.right = 30;
-    directionalLight.shadow.camera.top = 30;
-    directionalLight.shadow.camera.bottom = -30;
-    scene.add(directionalLight);
-
-    // Add fill light
-    const fillLight = new THREE.DirectionalLight(0x8888ff, 0.3);
-    fillLight.position.set(-10, 10, -10);
-    scene.add(fillLight);
-
-    // Add grid if visible
-    if (sceneData.environment.grid_visible) {
-      const gridHelper = new THREE.GridHelper(
-        sceneData.environment.grid_size,
-        sceneData.environment.grid_size,
-        0x444444,
-        0x333333
-      );
-      gridHelper.position.y = 0;
-      scene.add(gridHelper);
-    }
-
-    // Add ground plane
-    const groundGeometry = new THREE.PlaneGeometry(100, 100);
-    const groundMaterial = new THREE.MeshStandardMaterial({
-      color: 0x222233,
-      roughness: 0.9,
-      metalness: 0.1,
-    });
-    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    ground.name = 'ground';
-    scene.add(ground);
-
-    // Store refs
-    refs.current.renderer = renderer;
-    refs.current.scene = scene;
-    refs.current.camera = camera;
-    refs.current.controls = controls;
-
-    // Raycaster for object selection
-    const raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
-
-    const handleClick = (event: MouseEvent) => {
-      const rect = renderer.domElement.getBoundingClientRect();
-      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-      raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObjects(scene.children, true);
-
-      for (const intersect of intersects) {
-        let obj = intersect.object;
-        while (obj.parent && !obj.userData.objectId) {
-          obj = obj.parent;
-        }
-        if (obj.userData.objectId) {
-          onObjectSelect(obj.userData.objectId);
-          return;
-        }
-      }
-      onObjectSelect(null);
-    };
-
-    renderer.domElement.addEventListener('click', handleClick);
-
-    // Handle resize
-    const handleResize = () => {
-      if (!container) return;
-      const newWidth = container.clientWidth;
-      const newHeight = container.clientHeight;
-      camera.aspect = newWidth / newHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(newWidth, newHeight);
-    };
-
-    window.addEventListener('resize', handleResize);
-
-    // Animation loop
-    let time = 0;
-    const animate = () => {
-      refs.current.animationId = requestAnimationFrame(animate);
-      time += 0.016;
-
-      // Update controls
-      controls.update();
-
-      // Animate objects marked for animation
-      refs.current.objects.forEach((obj) => {
-        if (obj.userData.animating) {
-          if (obj.userData.objectType === 'conveyor') {
-            // Animate conveyor belt texture
-            const belt = obj.getObjectByName('belt');
-            if (belt && belt instanceof THREE.Mesh) {
-              const material = belt.material as THREE.MeshStandardMaterial;
-              if (material.map) {
-                material.map.offset.x += 0.01;
-              }
-            }
-          } else if (obj.userData.objectType === 'robot_arm') {
-            // Animate robot arm
-            const arm = obj.getObjectByName('upperArm');
-            if (arm) {
-              arm.rotation.z = Math.sin(time * 2) * 0.3;
-            }
-          }
-        }
-      });
-
-      renderer.render(scene, camera);
-    };
-    animate();
-
-    // Cleanup
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      renderer.domElement.removeEventListener('click', handleClick);
-      if (refs.current.animationId) {
-        cancelAnimationFrame(refs.current.animationId);
-      }
-      renderer.dispose();
-      container.removeChild(renderer.domElement);
-    };
-  }, []);
-
-  // Create object geometry based on type
+  // Create object geometry based on type (moved outside useEffect to make it stable)
   const createObjectGeometry = useCallback((sceneObj: SceneObject): THREE.Object3D => {
     const group = new THREE.Group();
     group.userData.objectId = sceneObj.id;
@@ -491,6 +295,215 @@ export function useThreeScene(
     return group;
   }, []);
 
+  // Initialize Three.js scene
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const container = containerRef.current;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+
+    // Create scene
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(sceneData.environment.background_color);
+    scene.fog = new THREE.Fog(sceneData.environment.background_color, 30, 100);
+
+    // Create camera
+    const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
+    camera.position.set(
+      sceneData.camera.position.x,
+      sceneData.camera.position.y,
+      sceneData.camera.position.z
+    );
+
+    // Create renderer
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true,
+    });
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+    container.appendChild(renderer.domElement);
+
+    // Create controls
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(
+      sceneData.camera.target.x,
+      sceneData.camera.target.y,
+      sceneData.camera.target.z
+    );
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.minDistance = 5;
+    controls.maxDistance = 100;
+    controls.maxPolarAngle = Math.PI / 2 - 0.1;
+
+    // Add lights
+    const ambientLight = new THREE.AmbientLight(
+      0xffffff,
+      sceneData.lighting.ambient_intensity
+    );
+    scene.add(ambientLight);
+
+    const directionalLight = new THREE.DirectionalLight(
+      0xffffff,
+      sceneData.lighting.directional_intensity
+    );
+    directionalLight.position.set(
+      sceneData.lighting.directional_position.x,
+      sceneData.lighting.directional_position.y,
+      sceneData.lighting.directional_position.z
+    );
+    directionalLight.castShadow = true;
+    directionalLight.shadow.mapSize.width = 2048;
+    directionalLight.shadow.mapSize.height = 2048;
+    directionalLight.shadow.camera.near = 0.5;
+    directionalLight.shadow.camera.far = 100;
+    directionalLight.shadow.camera.left = -30;
+    directionalLight.shadow.camera.right = 30;
+    directionalLight.shadow.camera.top = 30;
+    directionalLight.shadow.camera.bottom = -30;
+    scene.add(directionalLight);
+
+    // Add fill light
+    const fillLight = new THREE.DirectionalLight(0x8888ff, 0.3);
+    fillLight.position.set(-10, 10, -10);
+    scene.add(fillLight);
+
+    // Add grid if visible
+    if (sceneData.environment.grid_visible) {
+      const gridHelper = new THREE.GridHelper(
+        sceneData.environment.grid_size,
+        sceneData.environment.grid_size,
+        0x444444,
+        0x333333
+      );
+      gridHelper.position.y = 0;
+      scene.add(gridHelper);
+    }
+
+    // Add ground plane
+    const groundGeometry = new THREE.PlaneGeometry(100, 100);
+    const groundMaterial = new THREE.MeshStandardMaterial({
+      color: 0x222233,
+      roughness: 0.9,
+      metalness: 0.1,
+    });
+    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    ground.name = 'ground';
+    scene.add(ground);
+
+    // Store refs
+    refs.current.renderer = renderer;
+    refs.current.scene = scene;
+    refs.current.camera = camera;
+    refs.current.controls = controls;
+
+    // Add initial objects to the scene
+    console.log('Adding initial objects:', sceneData.objects.length);
+    sceneData.objects.forEach((sceneObj) => {
+      try {
+        const newObj = createObjectGeometry(sceneObj);
+        scene.add(newObj);
+        refs.current.objects.set(sceneObj.id, newObj);
+        console.log(`Added initial object: ${sceneObj.id} (${sceneObj.type})`);
+      } catch (error) {
+        console.error(`Failed to create initial object ${sceneObj.id}:`, error);
+      }
+    });
+
+    // Raycaster for object selection
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    const handleClick = (event: MouseEvent) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(scene.children, true);
+
+      for (const intersect of intersects) {
+        let obj = intersect.object;
+        while (obj.parent && !obj.userData.objectId) {
+          obj = obj.parent;
+        }
+        if (obj.userData.objectId) {
+          onObjectSelect(obj.userData.objectId);
+          return;
+        }
+      }
+      onObjectSelect(null);
+    };
+
+    renderer.domElement.addEventListener('click', handleClick);
+
+    // Handle resize
+    const handleResize = () => {
+      if (!container) return;
+      const newWidth = container.clientWidth;
+      const newHeight = container.clientHeight;
+      camera.aspect = newWidth / newHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(newWidth, newHeight);
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    // Animation loop
+    let time = 0;
+    const animate = () => {
+      refs.current.animationId = requestAnimationFrame(animate);
+      time += 0.016;
+
+      // Update controls
+      controls.update();
+
+      // Animate objects marked for animation
+      refs.current.objects.forEach((obj, id) => {
+        if (obj.userData.animating) {
+          if (obj.userData.objectType === 'conveyor') {
+            // Animate conveyor belt texture
+            const belt = obj.getObjectByName('belt');
+            if (belt && belt instanceof THREE.Mesh) {
+              const material = belt.material as THREE.MeshStandardMaterial;
+              if (material.map) {
+                material.map.offset.x += 0.01;
+              }
+            }
+          } else if (obj.userData.objectType === 'robot_arm') {
+            // Animate robot arm - rotate the upper arm
+            const arm = obj.getObjectByName('upperArm');
+            if (arm) {
+              arm.rotation.z = Math.sin(time * 2) * 0.3;
+            }
+          }
+        }
+      });
+
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      renderer.domElement.removeEventListener('click', handleClick);
+      if (refs.current.animationId) {
+        cancelAnimationFrame(refs.current.animationId);
+      }
+      renderer.dispose();
+      container.removeChild(renderer.domElement);
+    };
+  }, []); // Only run once on mount
+
   // Update scene objects when sceneData changes
   useEffect(() => {
     const { scene, objects } = refs.current;
@@ -565,11 +578,12 @@ export function useThreeScene(
           }
         });
       } else {
-        // Create new object
+        // Create new object (only for dynamically added objects after initial load)
         try {
           const newObj = createObjectGeometry(sceneObj);
           scene.add(newObj);
           objects.set(sceneObj.id, newObj);
+          console.log(`Created new object: ${sceneObj.id} of type ${sceneObj.type}`);
         } catch (error) {
           console.error(`Failed to create object ${sceneObj.id}:`, error);
         }
