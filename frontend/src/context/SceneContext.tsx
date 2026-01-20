@@ -206,218 +206,233 @@ export function SceneProvider({ children }: { children: React.ReactNode }) {
   });
 
   // Apply a single action to the scene
-  const applyAction = useCallback((action: SceneAction) => {
-    const { action: actionType, target, params } = action;
+  const applyAction = useCallback(
+    (action: SceneAction) => {
+      const { action: actionType, target, params } = action;
 
-    switch (actionType) {
-      case 'add_object': {
-        const newObject: SceneObject = {
-          id: target || `obj_${Date.now()}`,
-          type: (params.type as SceneObject['type']) || 'box',
-          name: (params.name as string) || 'New Object',
-          position: (params.position as Vector3) || { x: 0, y: 0, z: 0 },
-          rotation: (params.rotation as Vector3) || { x: 0, y: 0, z: 0 },
-          scale: (params.scale as Vector3) || { x: 1, y: 1, z: 1 },
-          color: (params.color as string) || '#888888',
-          visible: true,
-        };
-        dispatch({ type: 'ADD_OBJECT', payload: newObject });
-        break;
-      }
-
-      case 'remove_object':
-        if (target) {
-          dispatch({ type: 'REMOVE_OBJECT', payload: target });
+      switch (actionType) {
+        case 'add_object': {
+          const newObject: SceneObject = {
+            id: target || `obj_${Date.now()}`,
+            type: (params.type as SceneObject['type']) || 'box',
+            name: (params.name as string) || 'New Object',
+            position: (params.position as Vector3) || { x: 0, y: 0, z: 0 },
+            rotation: (params.rotation as Vector3) || { x: 0, y: 0, z: 0 },
+            scale: (params.scale as Vector3) || { x: 1, y: 1, z: 1 },
+            color: (params.color as string) || '#888888',
+            visible: true,
+          };
+          dispatch({ type: 'ADD_OBJECT', payload: newObject });
+          break;
         }
-        break;
 
-      case 'move_object':
-        if (target) {
-          const absolute = params.absolute as boolean;
-          const targetObj = state.sceneData.objects.find((obj) => obj.id === target);
+        case 'remove_object':
+          if (target) {
+            dispatch({ type: 'REMOVE_OBJECT', payload: target });
+          }
+          break;
 
-          if (absolute) {
-            dispatch({
-              type: 'UPDATE_OBJECT',
-              payload: {
-                id: target,
-                updates: { position: params.position as Vector3 },
-              },
-            });
-          } else if (targetObj) {
-            // Relative movement
-            const delta = params.delta as Vector3;
+        case 'move_object':
+          if (target) {
+            const absolute = params.absolute as boolean;
+
+            if (absolute) {
+              dispatch({
+                type: 'UPDATE_OBJECT',
+                payload: {
+                  id: target,
+                  updates: { position: params.position as Vector3 },
+                },
+              });
+            } else {
+              const targetObj = state.sceneData.objects.find((obj) => obj.id === target);
+
+              if (targetObj) {
+                const delta = params.delta as Vector3;
+                dispatch({
+                  type: 'UPDATE_OBJECT',
+                  payload: {
+                    id: target,
+                    updates: {
+                      position: {
+                        x: targetObj.position.x + (delta.x || 0),
+                        y: targetObj.position.y + (delta.y || 0),
+                        z: targetObj.position.z + (delta.z || 0),
+                      },
+                    },
+                  },
+                });
+              }
+            }
+          }
+          break;
+
+        case 'rotate_object':
+          if (target) {
+            const axis = params.axis as string;
+            const degrees = params.degrees as number;
+
+            const targetObj = state.sceneData.objects.find((obj) => obj.id === target);
+
+            if (targetObj) {
+              dispatch({
+                type: 'UPDATE_OBJECT',
+                payload: {
+                  id: target,
+                  updates: {
+                    rotation: {
+                      x:
+                        axis === 'x'
+                          ? targetObj.rotation.x + degrees
+                          : targetObj.rotation.x,
+                      y:
+                        axis === 'y'
+                          ? targetObj.rotation.y + degrees
+                          : targetObj.rotation.y,
+                      z:
+                        axis === 'z'
+                          ? targetObj.rotation.z + degrees
+                          : targetObj.rotation.z,
+                    },
+                  },
+                },
+              });
+            }
+          }
+          break;
+
+        case 'scale_object':
+          if (target) {
+            const factor = params.factor as number;
             dispatch({
               type: 'UPDATE_OBJECT',
               payload: {
                 id: target,
                 updates: {
-                  position: {
-                    x: targetObj.position.x + (delta.x || 0),
-                    y: targetObj.position.y + (delta.y || 0),
-                    z: targetObj.position.z + (delta.z || 0),
-                  },
+                  scale: { x: factor, y: factor, z: factor },
                 },
               },
             });
           }
-        }
-        break;
+          break;
 
-      case 'rotate_object':
-        if (target) {
-          const axis = params.axis as string;
-          const degrees = params.degrees as number;
-          const targetObj = state.sceneData.objects.find((obj) => obj.id === target);
-
-          if (targetObj) {
+        case 'set_color':
+          if (target) {
             dispatch({
               type: 'UPDATE_OBJECT',
               payload: {
                 id: target,
-                updates: {
-                  rotation: {
-                    x: axis === 'x' ? targetObj.rotation.x + degrees : targetObj.rotation.x,
-                    y: axis === 'y' ? targetObj.rotation.y + degrees : targetObj.rotation.y,
-                    z: axis === 'z' ? targetObj.rotation.z + degrees : targetObj.rotation.z,
-                  },
-                },
+                updates: { color: params.color as string },
               },
             });
           }
-        }
-        break;
+          break;
 
-      case 'scale_object':
-        if (target) {
-          const factor = params.factor as number;
-          dispatch({
-            type: 'UPDATE_OBJECT',
-            payload: {
-              id: target,
-              updates: {
-                scale: { x: factor, y: factor, z: factor },
-              },
-            },
-          });
-        }
-        break;
-
-      case 'set_color':
-        if (target) {
-          dispatch({
-            type: 'UPDATE_OBJECT',
-            payload: {
-              id: target,
-              updates: { color: params.color as string },
-            },
-          });
-        }
-        break;
-
-      case 'set_visibility':
-        if (target) {
-          dispatch({
-            type: 'UPDATE_OBJECT',
-            payload: {
-              id: target,
-              updates: { visible: params.visible as boolean },
-            },
-          });
-        }
-        break;
-
-      case 'highlight_object':
-        if (target) {
-          dispatch({
-            type: 'UPDATE_OBJECT',
-            payload: {
-              id: target,
-              updates: { highlighted: true },
-            },
-          });
-          // Auto-remove highlight after duration
-          const duration = (params.duration as number) || 3000;
-          setTimeout(() => {
+        case 'set_visibility':
+          if (target) {
             dispatch({
               type: 'UPDATE_OBJECT',
               payload: {
                 id: target,
-                updates: { highlighted: false },
+                updates: { visible: params.visible as boolean },
               },
             });
-          }, duration);
-        }
-        break;
+          }
+          break;
 
-      case 'camera_focus':
-      case 'camera_move':
-        dispatch({
-          type: 'SET_CAMERA_TRANSITION',
-          payload: {
-            active: true,
-            targetPosition: params.position as Vector3,
-            targetLookAt: params.target as Vector3,
-          },
-        });
-        break;
+        case 'highlight_object':
+          if (target) {
+            dispatch({
+              type: 'UPDATE_OBJECT',
+              payload: {
+                id: target,
+                updates: { highlighted: true },
+              },
+            });
+            // Auto-remove highlight after duration
+            const duration = (params.duration as number) || 3000;
+            setTimeout(() => {
+              dispatch({
+                type: 'UPDATE_OBJECT',
+                payload: {
+                  id: target,
+                  updates: { highlighted: false },
+                },
+              });
+            }, duration);
+          }
+          break;
 
-      case 'camera_zoom': {
-        const direction = params.direction as string;
-        const amount = (params.amount as number) || 0.5;
-        const zoomMultiplier = direction === 'in' ? 1 + amount : 1 / (1 + amount);
-        dispatch({
-          type: 'SET_CAMERA',
-          payload: { zoom: zoomMultiplier },
-        });
-        break;
-      }
-
-      case 'add_safety_zone': {
-        const safetyZone: SceneObject = {
-          id: target || `safety_zone_${Date.now()}`,
-          type: 'safety_zone',
-          name: 'Safety Zone',
-          position: (params.position as Vector3) || { x: 0, y: 0.05, z: 0 },
-          rotation: { x: 0, y: 0, z: 0 },
-          scale: (params.size as Vector3) || { x: 5, y: 0.1, z: 5 },
-          color: (params.color as string) || '#ff4444',
-          visible: true,
-        };
-        dispatch({ type: 'ADD_OBJECT', payload: safetyZone });
-        break;
-      }
-
-      case 'animate_object':
-        if (target) {
+        case 'camera_focus':
+        case 'camera_move':
           dispatch({
-            type: 'UPDATE_OBJECT',
+            type: 'SET_CAMERA_TRANSITION',
             payload: {
-              id: target,
-              updates: { animating: params.animate as boolean },
+              active: true,
+              targetPosition: params.position as Vector3,
+              targetLookAt: params.target as Vector3,
             },
           });
+          break;
+
+        case 'camera_zoom': {
+          const direction = params.direction as string;
+          const amount = (params.amount as number) || 0.5;
+          const zoomMultiplier = direction === 'in' ? 1 + amount : 1 / (1 + amount);
+          dispatch({
+            type: 'SET_CAMERA',
+            payload: { zoom: zoomMultiplier },
+          });
+          break;
         }
-        break;
 
-      case 'reset_scene':
-        dispatch({
-          type: 'RESET_SCENE',
-          payload: { keepDefaults: params.keep_defaults as boolean },
-        });
-        break;
+        case 'add_safety_zone': {
+          const safetyZone: SceneObject = {
+            id: target || `safety_zone_${Date.now()}`,
+            type: 'safety_zone',
+            name: 'Safety Zone',
+            position: (params.position as Vector3) || { x: 0, y: 0.05, z: 0 },
+            rotation: { x: 0, y: 0, z: 0 },
+            scale: (params.size as Vector3) || { x: 5, y: 0.1, z: 5 },
+            color: (params.color as string) || '#ff4444',
+            visible: true,
+          };
+          dispatch({ type: 'ADD_OBJECT', payload: safetyZone });
+          break;
+        }
 
-      case 'set_lighting':
-        dispatch({
-          type: 'SET_LIGHTING',
-          payload: params as Partial<LightingConfig>,
-        });
-        break;
+        case 'animate_object':
+          if (target) {
+            dispatch({
+              type: 'UPDATE_OBJECT',
+              payload: {
+                id: target,
+                updates: { animating: params.animate as boolean },
+              },
+            });
+          }
+          break;
 
-      default:
-        console.warn(`Unknown action type: ${actionType}`);
-    }
-  }, []);
+        case 'reset_scene':
+          dispatch({
+            type: 'RESET_SCENE',
+            payload: { keepDefaults: params.keep_defaults as boolean },
+          });
+          break;
+
+        case 'set_lighting':
+          dispatch({
+            type: 'SET_LIGHTING',
+            payload: params as Partial<LightingConfig>,
+          });
+          break;
+
+        default:
+          console.warn(`Unknown action type: ${actionType}`);
+      }
+    },
+    [dispatch, state.sceneData.objects]
+  );
 
   // Apply multiple actions
   const applyActions = useCallback(

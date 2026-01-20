@@ -269,7 +269,7 @@ export function useThreeScene(
         belt.position.y = 0.35;
         group.add(belt);
 
-        // Side rails
+        // Side rails with object color
         const railGeom = new THREE.BoxGeometry(10, 0.4, 0.1);
         const railMat = new THREE.MeshStandardMaterial({
           color: color,
@@ -277,12 +277,12 @@ export function useThreeScene(
           metalness: 0.6,
         });
 
-        const leftRail = new THREE.Mesh(railGeom, railMat);
+        const leftRail = new THREE.Mesh(railGeom, railMat.clone());
         leftRail.position.set(0, 0.5, 1);
         leftRail.castShadow = true;
         group.add(leftRail);
 
-        const rightRail = new THREE.Mesh(railGeom, railMat);
+        const rightRail = new THREE.Mesh(railGeom, railMat.clone());
         rightRail.position.set(0, 0.5, -1);
         rightRail.castShadow = true;
         group.add(rightRail);
@@ -303,7 +303,7 @@ export function useThreeScene(
         ];
 
         legPositions.forEach(([x, y, z]) => {
-          const leg = new THREE.Mesh(legGeom, legMat);
+          const leg = new THREE.Mesh(legGeom, legMat.clone());
           leg.position.set(x, y - 0.25, z);
           leg.castShadow = true;
           group.add(leg);
@@ -325,14 +325,14 @@ export function useThreeScene(
         base.receiveShadow = true;
         group.add(base);
 
-        // Lower arm section
+        // Lower arm section with object color
         const lowerArmGeom = new THREE.BoxGeometry(0.4, 2, 0.4);
         const armMat = new THREE.MeshStandardMaterial({
           color: color,
           roughness: 0.4,
           metalness: 0.6,
         });
-        const lowerArm = new THREE.Mesh(lowerArmGeom, armMat);
+        const lowerArm = new THREE.Mesh(lowerArmGeom, armMat.clone());
         lowerArm.position.y = 1.3;
         lowerArm.castShadow = true;
         group.add(lowerArm);
@@ -355,7 +355,7 @@ export function useThreeScene(
         upperArmGroup.position.y = 2.3;
 
         const upperArmGeom = new THREE.BoxGeometry(0.3, 1.5, 0.3);
-        const upperArm = new THREE.Mesh(upperArmGeom, armMat);
+        const upperArm = new THREE.Mesh(upperArmGeom, armMat.clone());
         upperArm.position.set(0.5, 0.5, 0);
         upperArm.rotation.z = -0.5;
         upperArm.castShadow = true;
@@ -408,9 +408,7 @@ export function useThreeScene(
         group.add(zone);
 
         // Add pulsing border
-        const borderGeom = new THREE.EdgesGeometry(
-          new THREE.BoxGeometry(1, 0.02, 1)
-        );
+        const borderGeom = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 0.02, 1));
         const borderMat = new THREE.LineBasicMaterial({
           color: color,
           linewidth: 2,
@@ -462,16 +460,13 @@ export function useThreeScene(
         const defaultMesh = new THREE.Mesh(defaultGeom, defaultMat);
         defaultMesh.position.y = 0.5;
         defaultMesh.castShadow = true;
+        defaultMesh.receiveShadow = true;
         group.add(defaultMesh);
       }
     }
 
     // Apply transforms
-    group.position.set(
-      sceneObj.position.x,
-      sceneObj.position.y,
-      sceneObj.position.z
-    );
+    group.position.set(sceneObj.position.x, sceneObj.position.y, sceneObj.position.z);
     group.rotation.set(
       THREE.MathUtils.degToRad(sceneObj.rotation.x),
       THREE.MathUtils.degToRad(sceneObj.rotation.y),
@@ -485,8 +480,10 @@ export function useThreeScene(
       group.traverse((child) => {
         if (child instanceof THREE.Mesh) {
           const material = child.material as THREE.MeshStandardMaterial;
-          material.emissive = new THREE.Color(0xffff00);
-          material.emissiveIntensity = 0.5;
+          if (material.emissive) {
+            material.emissive = new THREE.Color(0xffff00);
+            material.emissiveIntensity = 0.5;
+          }
         }
       });
     }
@@ -506,6 +503,17 @@ export function useThreeScene(
     objects.forEach((threeObj, id) => {
       if (!currentIds.has(id)) {
         scene.remove(threeObj);
+        // Dispose of geometries and materials to prevent memory leaks
+        threeObj.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            if (child.geometry) child.geometry.dispose();
+            if (Array.isArray(child.material)) {
+              child.material.forEach((mat) => mat.dispose());
+            } else if (child.material) {
+              child.material.dispose();
+            }
+          }
+        });
         objects.delete(id);
       }
     });
@@ -526,36 +534,45 @@ export function useThreeScene(
           THREE.MathUtils.degToRad(sceneObj.rotation.y),
           THREE.MathUtils.degToRad(sceneObj.rotation.z)
         );
-        existingObj.scale.set(
-          sceneObj.scale.x,
-          sceneObj.scale.y,
-          sceneObj.scale.z
-        );
+        existingObj.scale.set(sceneObj.scale.x, sceneObj.scale.y, sceneObj.scale.z);
         existingObj.visible = sceneObj.visible;
         existingObj.userData.animating = sceneObj.animating || false;
 
         // Update color
+        const targetColor = new THREE.Color(sceneObj.color);
         existingObj.traverse((child) => {
           if (child instanceof THREE.Mesh) {
             const material = child.material as THREE.MeshStandardMaterial;
-            if (material.color && child.name !== 'belt' && child.name !== 'ground') {
-              material.color.set(sceneObj.color);
+            if (
+              material &&
+              material.color &&
+              child.name !== 'belt' &&
+              child.name !== 'ground'
+            ) {
+              material.color.copy(targetColor);
+              material.needsUpdate = true;
             }
             // Handle highlight
-            if (sceneObj.highlighted) {
-              material.emissive = new THREE.Color(0xffff00);
+            if (sceneObj.highlighted && material.emissive) {
+              material.emissive.set(0xffff00);
               material.emissiveIntensity = 0.5;
-            } else {
-              material.emissive = new THREE.Color(0x000000);
+              material.needsUpdate = true;
+            } else if (!sceneObj.highlighted && material.emissive) {
+              material.emissive.set(0x000000);
               material.emissiveIntensity = 0;
+              material.needsUpdate = true;
             }
           }
         });
       } else {
         // Create new object
-        const newObj = createObjectGeometry(sceneObj);
-        scene.add(newObj);
-        objects.set(sceneObj.id, newObj);
+        try {
+          const newObj = createObjectGeometry(sceneObj);
+          scene.add(newObj);
+          objects.set(sceneObj.id, newObj);
+        } catch (error) {
+          console.error(`Failed to create object ${sceneObj.id}:`, error);
+        }
       }
     });
   }, [sceneData.objects, createObjectGeometry]);
