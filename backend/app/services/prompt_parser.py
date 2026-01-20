@@ -518,7 +518,7 @@ class PromptParser:
 
     def _parse_reset_command(self, text: str, context: Optional[Dict]) -> List[SceneAction]:
         """Parse reset/clear commands."""
-        if re.search(r'\b(reset|clear|restart)\s+(scene|all|everything)\b', text):
+        if re.search(r'\b(reset|clear|restart)\b.*?\b(scene|all|everything)\b', text):
             return [SceneAction(
                 action=ActionType.RESET_SCENE,
                 target="scene",

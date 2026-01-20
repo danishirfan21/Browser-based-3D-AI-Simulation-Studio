@@ -196,7 +196,7 @@ export function useThreeScene(
       controls.update();
 
       // Animate objects marked for animation
-      refs.current.objects.forEach((obj, id) => {
+      refs.current.objects.forEach((obj) => {
         if (obj.userData.animating) {
           if (obj.userData.objectType === 'conveyor') {
             // Animate conveyor belt texture
