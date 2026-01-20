@@ -234,6 +234,8 @@ export function SceneProvider({ children }: { children: React.ReactNode }) {
       case 'move_object':
         if (target) {
           const absolute = params.absolute as boolean;
+          const targetObj = state.sceneData.objects.find((obj) => obj.id === target);
+
           if (absolute) {
             dispatch({
               type: 'UPDATE_OBJECT',
@@ -242,14 +244,19 @@ export function SceneProvider({ children }: { children: React.ReactNode }) {
                 updates: { position: params.position as Vector3 },
               },
             });
-          } else {
-            // Relative movement - need to get current position
+          } else if (targetObj) {
+            // Relative movement
+            const delta = params.delta as Vector3;
             dispatch({
               type: 'UPDATE_OBJECT',
               payload: {
                 id: target,
                 updates: {
-                  position: params.delta as Vector3, // Will be handled in Three.js
+                  position: {
+                    x: targetObj.position.x + (delta.x || 0),
+                    y: targetObj.position.y + (delta.y || 0),
+                    z: targetObj.position.z + (delta.z || 0),
+                  },
                 },
               },
             });
@@ -261,19 +268,23 @@ export function SceneProvider({ children }: { children: React.ReactNode }) {
         if (target) {
           const axis = params.axis as string;
           const degrees = params.degrees as number;
-          dispatch({
-            type: 'UPDATE_OBJECT',
-            payload: {
-              id: target,
-              updates: {
-                rotation: {
-                  x: axis === 'x' ? degrees : 0,
-                  y: axis === 'y' ? degrees : 0,
-                  z: axis === 'z' ? degrees : 0,
+          const targetObj = state.sceneData.objects.find((obj) => obj.id === target);
+
+          if (targetObj) {
+            dispatch({
+              type: 'UPDATE_OBJECT',
+              payload: {
+                id: target,
+                updates: {
+                  rotation: {
+                    x: axis === 'x' ? targetObj.rotation.x + degrees : targetObj.rotation.x,
+                    y: axis === 'y' ? targetObj.rotation.y + degrees : targetObj.rotation.y,
+                    z: axis === 'z' ? targetObj.rotation.z + degrees : targetObj.rotation.z,
+                  },
                 },
               },
-            },
-          });
+            });
+          }
         }
         break;
 
