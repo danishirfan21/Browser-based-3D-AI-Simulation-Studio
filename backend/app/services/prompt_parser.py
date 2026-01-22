@@ -123,10 +123,18 @@ class PromptParser:
 
     def _extract_object_type(self, text: str) -> Optional[Tuple[ObjectType, str]]:
         """Extract object type from text, returns (type, matched_text)."""
-        for phrase, obj_type in sorted(self.OBJECT_MAPPINGS.items(), key=lambda x: -len(x[0])):
-            if phrase in text:
-                return obj_type, phrase
-        return None, None
+        matches = []
+        for phrase, obj_type in self.OBJECT_MAPPINGS.items():
+            index = text.find(phrase)
+            if index != -1:
+                matches.append((index, len(phrase), obj_type, phrase))
+
+        if not matches:
+            return None, None
+
+        # Sort by index (earliest first), then by length (longest first)
+        matches.sort(key=lambda x: (x[0], -x[1]))
+        return matches[0][2], matches[0][3]
 
     def _extract_color(self, text: str) -> Optional[str]:
         """Extract color from text."""
@@ -230,23 +238,35 @@ class PromptParser:
         if not context or "objects" not in context:
             return None
 
-        # First try to match by name or type
+        # Find all matching objects and their positions in the text
         text_lower = text.lower()
+        matches = []
         for obj in context["objects"]:
             obj_name = obj.get("name", "").lower()
-            obj_type = obj.get("type", "").lower()
+            obj_type = obj.get("type", "").lower().replace("_", " ")
             obj_id = obj.get("id", "")
 
-            if obj_name and obj_name in text_lower:
-                return obj_id
-            if obj_type and obj_type.replace("_", " ") in text_lower:
-                return obj_id
+            # Check for name match
+            if obj_name:
+                index = text_lower.find(obj_name)
+                if index != -1:
+                    matches.append((index, len(obj_name), obj_id))
 
-        # Try to match object type
-        obj_type, _ = self._extract_object_type(text_lower)
-        if obj_type:
+            # Check for type match
+            index = text_lower.find(obj_type)
+            if index != -1:
+                matches.append((index, len(obj_type), obj_id))
+
+        if matches:
+            # Sort by index (earliest first), then by length (longest first)
+            matches.sort(key=lambda x: (x[0], -x[1]))
+            return matches[0][2]
+
+        # Try to match object type from OBJECT_MAPPINGS if no direct match in context
+        obj_type_enum, _ = self._extract_object_type(text_lower)
+        if obj_type_enum:
             for obj in context["objects"]:
-                if obj.get("type") == obj_type.value:
+                if obj.get("type") == obj_type_enum.value:
                     return obj.get("id")
 
         return None
