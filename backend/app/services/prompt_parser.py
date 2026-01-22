@@ -16,8 +16,8 @@ class PromptParser:
         "robotic arm": ObjectType.ROBOT_ARM,
         "robot arm": ObjectType.ROBOT_ARM,
         "arm": ObjectType.ROBOT_ARM,
-        "conveyor": ObjectType.CONVEYOR,
         "conveyor belt": ObjectType.CONVEYOR,
+        "conveyor": ObjectType.CONVEYOR,
         "belt": ObjectType.CONVEYOR,
         "box": ObjectType.BOX,
         "cube": ObjectType.BOX,
@@ -52,21 +52,26 @@ class PromptParser:
         "brown": "#8b4513",
     }
 
-    # Position keywords
-    POSITION_KEYWORDS = {
-        "left": {"x": -5, "y": 0, "z": 0},
-        "right": {"x": 5, "y": 0, "z": 0},
-        "front": {"x": 0, "y": 0, "z": 5},
-        "back": {"x": 0, "y": 0, "z": -5},
-        "behind": {"x": 0, "y": 0, "z": -5},
-        "above": {"x": 0, "y": 3, "z": 0},
-        "below": {"x": 0, "y": -3, "z": 0},
-        "center": {"x": 0, "y": 0, "z": 0},
-        "middle": {"x": 0, "y": 0, "z": 0},
-        "next to": {"x": 3, "y": 0, "z": 0},
-        "beside": {"x": 3, "y": 0, "z": 0},
-        "near": {"x": 2, "y": 0, "z": 2},
-    }
+    # Position keywords (ordered by specificity/preference)
+    POSITION_KEYWORDS = [
+        ("next to", {"x": 3, "y": 0, "z": 0}),
+        ("beside", {"x": 3, "y": 0, "z": 0}),
+        ("near", {"x": 2, "y": 0, "z": 2}),
+        ("above", {"x": 0, "y": 3, "z": 0}),
+        ("below", {"x": 0, "y": -3, "z": 0}),
+        ("on the left", {"x": -5, "y": 0, "z": 0}),
+        ("on the right", {"x": 5, "y": 0, "z": 0}),
+        ("on the front", {"x": 0, "y": 0, "z": 5}),
+        ("on the back", {"x": 0, "y": 0, "z": -5}),
+        ("on", {"x": 0, "y": 1, "z": 0}),
+        ("left", {"x": -5, "y": 0, "z": 0}),
+        ("right", {"x": 5, "y": 0, "z": 0}),
+        ("front", {"x": 0, "y": 0, "z": 5}),
+        ("back", {"x": 0, "y": 0, "z": -5}),
+        ("behind", {"x": 0, "y": 0, "z": -5}),
+        ("center", {"x": 0, "y": 0, "z": 0}),
+        ("middle", {"x": 0, "y": 0, "z": 0}),
+    ]
 
     # Camera positions for common areas
     CAMERA_TARGETS = {
@@ -114,12 +119,20 @@ class PromptParser:
 
         return actions
 
-    def _generate_object_id(self, object_type: str) -> str:
-        """Generate a unique ID for a new object."""
+    def _generate_object_id(self, object_type: str, context: Optional[Dict] = None) -> str:
+        """Generate a unique ID for a new object, ensuring it doesn't exist in context."""
         if object_type not in self.object_counter:
             self.object_counter[object_type] = 0
-        self.object_counter[object_type] += 1
-        return f"{object_type}_{self.object_counter[object_type]}"
+
+        existing_ids = set()
+        if context and "objects" in context:
+            existing_ids = {obj.get("id") for obj in context["objects"]}
+
+        while True:
+            self.object_counter[object_type] += 1
+            new_id = f"{object_type}_{self.object_counter[object_type]}"
+            if new_id not in existing_ids:
+                return new_id
 
     def _extract_object_type(self, text: str) -> Optional[Tuple[ObjectType, str]]:
         """Extract object type from text, returns (type, matched_text)."""
@@ -190,11 +203,19 @@ class PromptParser:
         """Extract position from text relative to existing objects or absolute."""
         position = {"x": 0, "y": 0, "z": 0}
 
-        # Check for position keywords
-        for keyword, offset in self.POSITION_KEYWORDS.items():
-            if keyword in text:
-                position = offset.copy()
-                break
+        # Find all matching keywords and their positions
+        matches = []
+        for keyword, offset in self.POSITION_KEYWORDS:
+            # Check for keyword with word boundaries
+            pattern = rf'\b{re.escape(keyword)}\b'
+            match = re.search(pattern, text)
+            if match:
+                matches.append((match.start(), keyword, offset))
+
+        # Use the earliest match if any
+        if matches:
+            matches.sort(key=lambda x: x[0])
+            position = matches[0][2].copy()
 
         # Check for explicit coordinates
         coord_pattern = r'\(?\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*\)?'
@@ -214,19 +235,32 @@ class PromptParser:
                 if obj_name in text or obj_type in text:
                     base_pos = obj.get("position", {"x": 0, "y": 0, "z": 0})
                     # Add offset based on position keywords
-                    for keyword, offset in self.POSITION_KEYWORDS.items():
-                        if keyword in text:
-                            position = {
+                    matches = []
+                    for keyword, offset in self.POSITION_KEYWORDS:
+                        pattern = rf'\b{re.escape(keyword)}\b'
+                        match = re.search(pattern, text)
+                        if match:
+                            target_y = base_pos["y"] + offset["y"]
+                            # For keywords that imply being on the ground next to something,
+                            # ensure y is 0 (ground level)
+                            if keyword in ["near", "beside", "next to", "left", "right", "front", "back", "on the left", "on the right", "on the front", "on the back"]:
+                                target_y = 0
+
+                            pos = {
                                 "x": base_pos["x"] + offset["x"],
-                                "y": base_pos["y"] + offset["y"],
+                                "y": target_y,
                                 "z": base_pos["z"] + offset["z"]
                             }
-                            break
+                            matches.append((match.start(), pos))
+
+                    if matches:
+                        matches.sort(key=lambda x: x[0])
+                        position = matches[0][1]
                     else:
-                        # Default offset if no keyword
+                        # Default offset if no keyword (default to ground level next to object)
                         position = {
                             "x": base_pos["x"] + 3,
-                            "y": base_pos["y"],
+                            "y": 0,
                             "z": base_pos["z"]
                         }
                     break
@@ -283,7 +317,7 @@ class PromptParser:
                 if obj_type:
                     position = self._extract_position(text, context)
                     color = self._extract_color(text) or "#888888"
-                    obj_id = self._generate_object_id(obj_type.value)
+                    obj_id = self._generate_object_id(obj_type.value, context)
 
                     return [SceneAction(
                         action=ActionType.ADD_OBJECT,
@@ -442,7 +476,7 @@ class PromptParser:
 
                 # Check for safety zone highlighting
                 if 'safety' in text or 'zone' in text or 'area' in text:
-                    obj_id = self._generate_object_id("safety_zone")
+                    obj_id = self._generate_object_id("safety_zone", context)
                     position = self._extract_position(text, context)
                     return [SceneAction(
                         action=ActionType.ADD_SAFETY_ZONE,
@@ -576,7 +610,7 @@ class PromptParser:
             # Assume they want to add it
             position = self._extract_position(text, context)
             color = self._extract_color(text) or "#888888"
-            obj_id = self._generate_object_id(obj_type.value)
+            obj_id = self._generate_object_id(obj_type.value, context)
 
             return [SceneAction(
                 action=ActionType.ADD_OBJECT,
