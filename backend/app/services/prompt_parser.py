@@ -57,6 +57,7 @@ class PromptParser:
         ("next to", {"x": 3, "y": 0, "z": 0}),
         ("beside", {"x": 3, "y": 0, "z": 0}),
         ("near", {"x": 2, "y": 0, "z": 2}),
+        ("around", {"x": 0, "y": 0, "z": 0}),
         ("above", {"x": 0, "y": 3, "z": 0}),
         ("below", {"x": 0, "y": -3, "z": 0}),
         ("on the left", {"x": -5, "y": 0, "z": 0}),
@@ -231,8 +232,22 @@ class PromptParser:
         if context and "objects" in context:
             for obj in context["objects"]:
                 obj_name = obj.get("name", "").lower()
-                obj_type = obj.get("type", "").lower()
-                if obj_name in text or obj_type in text:
+                obj_type = obj.get("type", "").lower().replace("_", " ")
+                # Check for name, type, or parts of type (e.g. "robot" in "robot arm")
+                is_match = False
+                if obj_name and obj_name in text:
+                    is_match = True
+                elif obj_type:
+                    if obj_type in text:
+                        is_match = True
+                    else:
+                        # Check each word of the type (e.g. "robot")
+                        for part in obj_type.split():
+                            if len(part) > 3 and part in text:
+                                is_match = True
+                                break
+
+                if is_match:
                     base_pos = obj.get("position", {"x": 0, "y": 0, "z": 0})
                     # Add offset based on position keywords
                     matches = []
@@ -243,7 +258,7 @@ class PromptParser:
                             target_y = base_pos["y"] + offset["y"]
                             # For keywords that imply being on the ground next to something,
                             # ensure y is 0 (ground level)
-                            if keyword in ["near", "beside", "next to", "left", "right", "front", "back", "on the left", "on the right", "on the front", "on the back"]:
+                            if keyword in ["near", "beside", "next to", "left", "right", "front", "back", "on the left", "on the right", "on the front", "on the back", "around"]:
                                 target_y = 0
 
                             pos = {
@@ -294,6 +309,22 @@ class PromptParser:
         if matches:
             # Sort by index (earliest first), then by length (longest first)
             matches.sort(key=lambda x: (x[0], -x[1]))
+
+            # If we have multiple matches at the same earliest position, try to disambiguate by color
+            earliest_idx = matches[0][0]
+            candidates_at_earliest = [m for m in matches if m[0] == earliest_idx]
+
+            if len(candidates_at_earliest) > 1:
+                prompt_color = self._extract_color(text)
+                if prompt_color:
+                    for _, _, obj_id in candidates_at_earliest:
+                        # Find object in context to check its color
+                        for obj in context["objects"]:
+                            if obj.get("id") == obj_id:
+                                obj_color = obj.get("color", "").lower()
+                                if obj_color == prompt_color:
+                                    return obj_id
+
             return matches[0][2]
 
         # Try to match object type from OBJECT_MAPPINGS if no direct match in context
