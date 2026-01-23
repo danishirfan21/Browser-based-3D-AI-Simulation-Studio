@@ -41,6 +41,7 @@ class SceneAction(BaseModel):
 class PromptRequest(BaseModel):
     prompt: str
     context: Optional[Dict[str, Any]] = None  # Current scene state for context
+    use_ai: bool = False
 
 
 class ActionResponse(BaseModel):

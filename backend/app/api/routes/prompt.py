@@ -35,14 +35,23 @@ async def parse_prompt(
         actions = []
         used_ai = False
 
-        # Try AI parser if configured
-        if settings.AI_API_KEY:
+        if request.use_ai:
+            if not settings.AI_API_KEY:
+                return ActionResponse(
+                    success=False,
+                    actions=[],
+                    message="AI parsing is not enabled. Please configure AI_API_KEY in the backend.",
+                    original_prompt=request.prompt
+                )
+
             actions = await ai_prompt_parser.parse(request.prompt, request.context)
             if actions:
                 used_ai = True
-
-        # Fallback to rule-based parser if AI didn't return actions or isn't configured
-        if not actions:
+            else:
+                # Fallback to rule-based if AI fails but was requested
+                actions = prompt_parser.parse(request.prompt, request.context)
+        else:
+            # Explicitly use rule-based
             actions = prompt_parser.parse(request.prompt, request.context)
 
         if not actions:
@@ -88,14 +97,23 @@ async def parse_prompt_demo(request: PromptRequest):
         actions = []
         used_ai = False
 
-        # Try AI parser if configured
-        if settings.AI_API_KEY:
+        if request.use_ai:
+            if not settings.AI_API_KEY:
+                return ActionResponse(
+                    success=False,
+                    actions=[],
+                    message="AI parsing is not enabled. Please configure AI_API_KEY in the backend.",
+                    original_prompt=request.prompt
+                )
+
             actions = await ai_prompt_parser.parse(request.prompt, request.context)
             if actions:
                 used_ai = True
-
-        # Fallback to rule-based parser
-        if not actions:
+            else:
+                # Fallback to rule-based
+                actions = prompt_parser.parse(request.prompt, request.context)
+        else:
+            # Explicitly use rule-based
             actions = prompt_parser.parse(request.prompt, request.context)
 
         if not actions:

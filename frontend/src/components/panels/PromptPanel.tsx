@@ -5,6 +5,7 @@ import type { PromptHistoryEntry } from '../../types';
 
 export function PromptPanel() {
   const [prompt, setPrompt] = useState('');
+  const [useAi, setUseAi] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -25,6 +26,7 @@ export function PromptPanel() {
         context: {
           objects: state.sceneData.objects,
         },
+        use_ai: useAi,
       });
 
       // Add to history
@@ -96,6 +98,30 @@ export function PromptPanel() {
 
       {/* Input area */}
       <div className="p-4 border-b border-industrial-700">
+        {/* AI Toggle */}
+        <div className="flex items-center justify-between mb-3">
+          <label className="flex items-center gap-2 cursor-pointer group">
+            <div className="relative inline-flex items-center">
+              <input
+                type="checkbox"
+                className="sr-only peer"
+                checked={useAi}
+                onChange={(e) => setUseAi(e.target.checked)}
+              />
+              <div className="w-9 h-5 bg-industrial-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent-primary"></div>
+            </div>
+            <span className="text-xs font-medium text-gray-300 group-hover:text-white transition-colors flex items-center gap-1.5">
+              <svg className={`w-3.5 h-3.5 ${useAi ? 'text-accent-primary' : 'text-gray-500'}`} fill="currentColor" viewBox="0 0 20 20">
+                <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" />
+              </svg>
+              Enable AI Parsing
+            </span>
+          </label>
+          <div className="text-[10px] text-gray-500 italic">
+            {useAi ? 'Uses LLM for complex logic' : 'Standard rule-based engine'}
+          </div>
+        </div>
+
         <div className="relative">
           <textarea
             ref={inputRef}
