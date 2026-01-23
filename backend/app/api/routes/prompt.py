@@ -3,14 +3,17 @@ from sqlalchemy.orm import Session
 
 from ...core.database import get_db
 from ...core.security import get_current_user
+from ...core.config import settings
 from ...models.user import User
 from ...schemas.action import PromptRequest, ActionResponse
 from ...services.prompt_parser import PromptParser
+from ...services.ai_prompt_parser import AIPromptParser
 
 router = APIRouter(prefix="/prompt", tags=["prompts"])
 
-# Initialize the prompt parser
+# Initialize the prompt parsers
 prompt_parser = PromptParser()
+ai_prompt_parser = AIPromptParser()
 
 
 @router.post("", response_model=ActionResponse)
@@ -29,7 +32,27 @@ async def parse_prompt(
     - "Zoom camera to inspection area"
     """
     try:
-        actions = prompt_parser.parse(request.prompt, request.context)
+        actions = []
+        used_ai = False
+
+        if request.use_ai:
+            if not settings.AI_API_KEY:
+                return ActionResponse(
+                    success=False,
+                    actions=[],
+                    message="AI parsing is not enabled. Please configure AI_API_KEY in the backend.",
+                    original_prompt=request.prompt
+                )
+
+            actions = await ai_prompt_parser.parse(request.prompt, request.context)
+            if actions:
+                used_ai = True
+            else:
+                # Fallback to rule-based if AI fails but was requested
+                actions = prompt_parser.parse(request.prompt, request.context)
+        else:
+            # Explicitly use rule-based
+            actions = prompt_parser.parse(request.prompt, request.context)
 
         if not actions:
             return ActionResponse(
@@ -46,10 +69,14 @@ async def parse_prompt(
                 desc += f" on {action.target}"
             action_descriptions.append(desc)
 
+        message = f"Parsed {len(actions)} action(s): {', '.join(action_descriptions)}"
+        if used_ai:
+            message += " (AI-powered)"
+
         return ActionResponse(
             success=True,
             actions=actions,
-            message=f"Parsed {len(actions)} action(s): {', '.join(action_descriptions)}",
+            message=message,
             original_prompt=request.prompt
         )
 
@@ -67,7 +94,27 @@ async def parse_prompt_demo(request: PromptRequest):
     Useful for testing and development.
     """
     try:
-        actions = prompt_parser.parse(request.prompt, request.context)
+        actions = []
+        used_ai = False
+
+        if request.use_ai:
+            if not settings.AI_API_KEY:
+                return ActionResponse(
+                    success=False,
+                    actions=[],
+                    message="AI parsing is not enabled. Please configure AI_API_KEY in the backend.",
+                    original_prompt=request.prompt
+                )
+
+            actions = await ai_prompt_parser.parse(request.prompt, request.context)
+            if actions:
+                used_ai = True
+            else:
+                # Fallback to rule-based
+                actions = prompt_parser.parse(request.prompt, request.context)
+        else:
+            # Explicitly use rule-based
+            actions = prompt_parser.parse(request.prompt, request.context)
 
         if not actions:
             return ActionResponse(
@@ -84,10 +131,14 @@ async def parse_prompt_demo(request: PromptRequest):
                 desc += f" on {action.target}"
             action_descriptions.append(desc)
 
+        message = f"Parsed {len(actions)} action(s): {', '.join(action_descriptions)}"
+        if used_ai:
+            message += " (AI-powered)"
+
         return ActionResponse(
             success=True,
             actions=actions,
-            message=f"Parsed {len(actions)} action(s): {', '.join(action_descriptions)}",
+            message=message,
             original_prompt=request.prompt
         )
 

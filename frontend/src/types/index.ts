@@ -97,6 +97,7 @@ export interface PromptRequest {
   context?: {
     objects: SceneObject[];
   };
+  use_ai?: boolean;
 }
 
 // Prompt history entry
